@@ -1,7 +1,9 @@
-import json
 from pathlib import Path
 
-FLAG_NAMES = {
+from .base import load_json
+from .event_logger import log_status_update
+
+FLAG_NAMES: dict[int, str] = {
     0: "is_docked",
     1: "is_landed",
     2: "is_landing_gear_down",
@@ -36,17 +38,30 @@ FLAG_NAMES = {
     31: "is_srv_high_beam_on",
 }
 
-def handle(status):
-    flags = status.get("Flags", 0)
 
-    if not flags:
-        return []
+class StatusService:
+    def __init__(self) -> None:
+        self._cache: dict = {}
+        self._last_raw: dict = {}
 
-    status["flags"] = decode_flags(flags)
-    return status
+    def handle(self, path: Path) -> None:
+        status = load_json(path)
+        flags = status.get("Flags", 0)
 
-def decode_flags(flags):
-    return {
-        name: bool(flags & (1 << bit))
-        for bit, name in FLAG_NAMES.items()
-    }
+        if status != self._last_raw:
+            self._last_raw = status
+            log_status_update(status)
+
+        if flags:
+            status["Flags"] = self._decode_flags(flags)
+            self._cache = status
+
+    @staticmethod
+    def _decode_flags(flags: int) -> dict[str, bool]:
+        return {
+            name: bool(flags & (1 << bit))
+            for bit, name in FLAG_NAMES.items()
+        }
+
+    def get_cache(self) -> dict:
+        return self._cache
